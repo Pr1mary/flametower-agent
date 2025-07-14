@@ -5,14 +5,23 @@ from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
 from crontab import CronTab
 from datetime import datetime
+import pytz
+from pathlib import Path
+
 load_dotenv()
 
+def getCurrTime():
+    utc_now = datetime.now(pytz.utc)
+    zone = pytz.timezone(os.getenv("TIME_ZONE"))
+
+    return utc_now.astimezone(zone)
+
 def printLog(args):
-    print("({}) {}".format(datetime.now(), args))
+    print("({}) {}".format(getCurrTime(), args))
 
 def dataStruct(machine_id):
     data = {
-        "last_update": datetime.now(),
+        "last_update": getCurrTime(),
         "status": "UP",
         "updated_by": machine_id
     }
@@ -31,8 +40,8 @@ def uptimeStart():
 
 def registerCron():
 
-    cron = CronTab(user="rafli")
-    job = cron.new(command='python3 main.py start')
+    cron = CronTab(user="root")
+    job = cron.new(command="python3 {} start >> {}/log.txt".format(Path(__file__).absolute(), Path(__file__)))
     job.minute.every(1)
     cron.write()
 
@@ -40,7 +49,7 @@ def registerCron():
 
 def removeCron():
     
-    cron = CronTab(user="rafli")
+    cron = CronTab(user="root")
     cron.remove_all()
     printLog("Script has been removed from crontab")
 

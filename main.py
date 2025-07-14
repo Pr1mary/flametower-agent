@@ -41,7 +41,7 @@ def uptimeStart():
 def registerCron():
 
     cron = CronTab(user="root")
-    job = cron.new(command="python3 {} start >> {}/log.txt".format(Path(__file__).absolute(), Path(__file__)))
+    job = cron.new(command="python3 {} start >> {}".format(Path(__file__).absolute(), Path("log.txt").absolute()))
     job.minute.every(1)
     cron.write()
 

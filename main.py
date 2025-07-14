@@ -23,6 +23,7 @@ def dataStruct(machine_id):
     data = {
         "last_update": getCurrTime(),
         "status": "UP",
+        "interval_min": int(os.getenv("INTERVAL_MINUTES")),
         "updated_by": machine_id
     }
     return data
@@ -42,7 +43,7 @@ def registerCron():
 
     cron = CronTab(user="root")
     job = cron.new(command="python3 {} start >> {}".format(Path(__file__).absolute(), Path("log.txt").absolute()))
-    job.minute.every(1)
+    job.minute.every(int(os.getenv("INTERVAL_MINUTES")))
     cron.write()
 
     printLog("Script has been registered to crontab")

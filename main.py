@@ -7,6 +7,7 @@ from crontab import CronTab
 from datetime import datetime
 import pytz
 from pathlib import Path
+import socket
 
 load_dotenv()
 
@@ -24,16 +25,17 @@ def dataStruct(machine_id):
         "last_update": getCurrTime(),
         "status": "UP",
         "interval_min": int(os.getenv("INTERVAL_MINUTES")),
-        "updated_by": machine_id
+        "machine_id": machine_id,
+        "group_id": os.getenv("GROUP_ID")
     }
     return data
 
 def uptimeStart():
     cred = credentials.Certificate(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
-    app = firebase_admin.initialize_app()
-    db = firestore.client()
+    app = firebase_admin.initialize_app(cred)
+    db = firestore.client(app)
 
-    machine_id = os.getenv("INSTANCE_ID")
+    machine_id = os.getenv("INSTANCE_ID") or socket.gethostname()
 
     printLog("Start write uptime")
     db.collection("machine-uptime").document(machine_id).set(dataStruct(machine_id))
@@ -54,14 +56,22 @@ def removeCron():
     cron.remove_all()
     printLog("Script has been removed from crontab")
 
+def showHelp():
+    print("Basic commands")
+    print(" start\t\t: trigger update status to firestore")
+    print(" register\t: register cron scheduling for this script")
+    print(" remove\t\t: remove this script from cron scheduler")
+
 def main():
-    known_args = ["register", "start", "remove"]
+    known_args = ["start", "register", "remove", "help"]
     if len(sys.argv) > 2 or len(sys.argv) < 2 or sys.argv[1] not in known_args:
         print("Argument invalid! should be: {}".format("|".join(known_args)))
         return
     
-    if sys.argv[1] == "start": uptimeStart()
-    elif sys.argv[1] == "register": registerCron()
-    elif sys.argv[1] == "remove": removeCron()
+    
+    if sys.argv[1] == known_args[0]: uptimeStart()
+    elif sys.argv[1] == known_args[1]: registerCron()
+    elif sys.argv[1] == known_args[2]: removeCron()
+    elif sys.argv[1] == known_args[3]: showHelp() 
 
 main()

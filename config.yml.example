@@ -1,0 +1,6 @@
+firebase_creds: "path to firebase admin sdk json"
+instance_id: "instance id"
+interval_minutes: 1
+group_id: "uuid if possible"
+timezone: "your timezone"
+virtualenv: "path to your virtual environment in this project directory, optional"

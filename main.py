@@ -9,6 +9,7 @@ import pytz
 from pathlib import Path
 import socket
 import yaml
+import getpass
 
 config = {}
 with open("config.yml", 'r') as stream:
@@ -44,18 +45,29 @@ def uptimeStart():
     printLog("Write uptime done")
 
 def registerCron():
+    user = getpass.getuser()
+    cron = CronTab(user=user)
 
-    cron = CronTab(user="root")
-    job = cron.new(command="python3 {} start >> {}".format(Path(__file__).absolute(), Path("log.txt").absolute()))
+    if config.get("virtualenv"):
+        command = "source {}/bin/activate && python3 {} start >> {}".format(
+            Path(config.get("virtualenv")).absolute(),
+            Path(__file__).absolute(),
+            Path("log.txt").absolute())
+    else:
+        command = "python3 {} start >> {}".format(Path(__file__).absolute(), Path("log.txt").absolute())
+
+    job = cron.new(command=command, comment="project-uptime")
     job.minute.every(int(config.get("interval_minutes")))
     cron.write()
 
     printLog("Script has been registered to crontab")
 
 def removeCron():
+    user = getpass.getuser()
+    cron = CronTab(user=user)
+
+    cron.remove_all(comment="project-uptime")
     
-    cron = CronTab(user="root")
-    cron.remove_all()
     printLog("Script has been removed from crontab")
 
 def showHelp():
@@ -64,8 +76,11 @@ def showHelp():
     print(" register\t: register cron scheduling for this script")
     print(" remove\t\t: remove this script from cron scheduler")
 
+def debug():
+    print("{}/bin/activate".format(Path(config.get("virtualenv")).absolute()))
+
 def main():
-    known_args = ["start", "register", "remove", "help"]
+    known_args = ["start", "register", "remove", "help", "debug"]
     if len(sys.argv) > 2 or len(sys.argv) < 2 or sys.argv[1] not in known_args:
         print("Argument invalid! should be: {}".format("|".join(known_args)))
         return
@@ -74,6 +89,7 @@ def main():
     if sys.argv[1] == known_args[0]: uptimeStart()
     elif sys.argv[1] == known_args[1]: registerCron()
     elif sys.argv[1] == known_args[2]: removeCron()
-    elif sys.argv[1] == known_args[3]: showHelp() 
+    elif sys.argv[1] == known_args[3]: showHelp()
+    elif sys.argv[1] == known_args[4]: debug()
 
 main()

@@ -4,3 +4,4 @@ interval_minutes: 1
 group_id: "uuid if possible"
 timezone: "your timezone"
 virtualenv: "path to your virtual environment in this project directory, optional"
+show_public_ip: false

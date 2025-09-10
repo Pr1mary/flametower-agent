@@ -9,6 +9,7 @@ import socket
 import yaml
 import getpass
 import requests
+import platform
 
 config = {}
 project_path = Path(__file__).absolute().parent
@@ -55,6 +56,7 @@ def dataStruct(machine_id):
         "group_id": config.get("group_id"),
         "local_ip": fetchLocalIP(),
         "public_ip": fetchPublicIP() if config.get("show_public_ip") else None,
+        "os_type": platform.system()
     }
     return data
 

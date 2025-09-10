@@ -9,6 +9,7 @@ import socket
 import yaml
 import getpass
 import requests
+import platform
 
 config = {}
 project_path = Path(__file__).absolute().parent
@@ -54,7 +55,8 @@ def dataStruct(machine_id):
         "machine_id": machine_id,
         "group_id": config.get("group_id"),
         "local_ip": fetchLocalIP(),
-        "public_ip": fetchPublicIP()
+        "public_ip": fetchPublicIP() if config.get("show_public_ip") else None,
+        "os_type": platform.system()
     }
     return data
 
@@ -112,11 +114,10 @@ def showHelp():
     print(" remove\t\t: remove this script from cron scheduler")
 
 def main():
-    known_args = ["start", "register", "remove", "help", "debug"]
+    known_args = ["start", "register", "remove", "help"]
     if len(sys.argv) > 2 or len(sys.argv) < 2 or sys.argv[1] not in known_args:
         print("Argument invalid! should be: {}".format("|".join(known_args)))
         return
-    
     
     if sys.argv[1] == known_args[0]: uptimeStart()
     elif sys.argv[1] == known_args[1]: registerCron()

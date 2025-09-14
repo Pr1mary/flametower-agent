@@ -10,6 +10,7 @@ import yaml
 import getpass
 import requests
 import platform
+import uuid
 
 config = {}
 project_path = Path(__file__).absolute().parent
@@ -47,8 +48,8 @@ def fetchPublicIP():
         ip = None
     return ip
 
-# create data structure for firestore
-def dataStruct(machine_id):
+# create structure for ping data
+def pingStruct(machine_id):
     data = {
         "last_update": getCurrTime(),
         "interval_min": int(config.get("interval_minutes")),
@@ -60,21 +61,48 @@ def dataStruct(machine_id):
     }
     return data
 
-# command "start" - write uptime data to firestore
-def uptimeStart():
+# create structure for startup data
+def wakeupStruct(data_id, machine_id):
+    data = {
+        "id": data_id,
+        "machine_id": machine_id,
+        "group_id": config.get("group_id"),
+        "timestamp": getCurrTime()
+    }
+    return data
+
+def getDB():
     firebase_creds = "{}/{}".format(project_path, config.get("firebase_creds"))
     if not Path(firebase_creds).exists():
         printLog("Firebase credentials not found!")
-        return
+        return None
     cred = credentials.Certificate(firebase_creds)
     app = firebase_admin.initialize_app(cred)
     db = firestore.client(app)
+    return db
+
+# command "ping" - write uptime data ping to firestore
+def uptimePing():
+    db = getDB()
+    if not db: return
 
     machine_id = config.get("instance_id") or socket.gethostname()
 
-    printLog("Start write uptime")
-    db.collection("machine-uptime").document(machine_id).set(dataStruct(machine_id))
-    printLog("Write uptime done")
+    printLog("Start write uptime ping data")
+    db.collection("machine-uptime").document(machine_id).set(pingStruct(machine_id))
+    printLog("Write uptime done ping data")
+
+# command "wake" - write uptime data startup log to firestore
+def uptimeWake():
+    db = getDB()
+    if not db: return
+
+    machine_id = config.get("instance_id") or socket.gethostname()
+    data_id = str(uuid.uuid4())
+
+    printLog("Start write uptime wake data")
+    db.collection("machine-wakeup").document(data_id).set(wakeupStruct(data_id, machine_id))
+    printLog("Write uptime done wake data")
 
 # command "register" - register this script to cronjob
 def registerCron():
@@ -114,14 +142,15 @@ def showHelp():
     print(" remove\t\t: remove this script from cron scheduler")
 
 def main():
-    known_args = ["start", "register", "remove", "help"]
+    known_args = ["ping", "wake", "register", "remove", "help"]
     if len(sys.argv) > 2 or len(sys.argv) < 2 or sys.argv[1] not in known_args:
         print("Argument invalid! should be: {}".format("|".join(known_args)))
         return
     
-    if sys.argv[1] == known_args[0]: uptimeStart()
-    elif sys.argv[1] == known_args[1]: registerCron()
-    elif sys.argv[1] == known_args[2]: removeCron()
+    if sys.argv[1] == known_args[0]: uptimePing()
+    elif sys.argv[1] == known_args[1]: uptimeWake()
+    elif sys.argv[1] == known_args[2]: registerCron()
+    elif sys.argv[1] == known_args[3]: removeCron()
     elif sys.argv[1] == known_args[3]: showHelp()
 
 main()

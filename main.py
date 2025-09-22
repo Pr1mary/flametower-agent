@@ -10,6 +10,7 @@ import yaml
 import getpass
 import requests
 import platform
+import uuid
 
 config = {}
 project_path = Path(__file__).absolute().parent
@@ -48,20 +49,32 @@ def fetchPublicIP():
     return ip
 
 # create data structure for firestore
-def dataStruct(machine_id):
+def pingStruct(data_id, machine_id):
     data = {
-        "last_update": getCurrTime(),
+        "id": data_id,
+        "timestamp": getCurrTime(),
         "interval_min": int(config.get("interval_minutes")),
         "machine_id": machine_id,
-        "group_id": config.get("group_id"),
         "local_ip": fetchLocalIP(),
         "public_ip": fetchPublicIP() if config.get("show_public_ip") else None,
         "os_type": platform.system()
     }
     return data
 
-# command "start" - write uptime data to firestore
-def uptimeStart():
+# create data structure for firestore
+def registerStruct(machine_id):
+    data = {
+        "timestamp": getCurrTime(),
+        "interval_min": int(config.get("interval_minutes")),
+        "machine_id": machine_id,
+        "local_ip": fetchLocalIP(),
+        "public_ip": fetchPublicIP() if config.get("show_public_ip") else None,
+        "os_type": platform.system()
+    }
+    return data
+
+# command "ping" - write uptime data to firestore
+def uptimePing():
     firebase_creds = "{}/{}".format(project_path, config.get("firebase_creds"))
     if not Path(firebase_creds).exists():
         printLog("Firebase credentials not found!")
@@ -71,13 +84,21 @@ def uptimeStart():
     db = firestore.client(app)
 
     machine_id = config.get("instance_id") or socket.gethostname()
+    data_id = str(uuid.uuid4())
 
     printLog("Start write uptime")
-    db.collection("machine-uptime").document(machine_id).set(dataStruct(machine_id))
+    db.collection("machine-uptime").document(data_id).set(pingStruct(data_id, machine_id))
     printLog("Write uptime done")
 
 # command "register" - register this script to cronjob
 def registerCron():
+    # fetch firebase creds
+    firebase_creds = "{}/{}".format(project_path, config.get("firebase_creds"))
+    if not Path(firebase_creds).exists():
+        printLog("Firebase credentials not found!")
+        return
+    
+    # get current user and setup cron
     user = getpass.getuser()
     cron = CronTab(user=user)
     virtualenv_path = "{}/{}".format(project_path, config.get("virtualenv")) if config.get("virtualenv") else None
@@ -90,11 +111,24 @@ def registerCron():
     else:
         command = "python3 {} start >> {}".format(Path(__file__).absolute(), Path("log.txt").absolute())
 
+    # register uptime ping to cronjob
     job = cron.new(command=command, comment="project-uptime")
     job.minute.every(int(config.get("interval_minutes")))
     cron.write()
 
     printLog("Script has been registered to crontab")
+
+    # setup firestore
+    cred = credentials.Certificate(firebase_creds)
+    app = firebase_admin.initialize_app(cred)
+    db = firestore.client(app)
+
+    machine_id = config.get("instance_id") or socket.gethostname()
+    data_id = str(uuid.uuid4())
+
+    printLog("Start write uptime")
+    db.collection("machine-uptime").document(data_id).set(dataStruct(data_id, machine_id))
+    printLog("Write uptime done")
 
 # command "remove" - remove this script from cronjob
 def removeCron():
@@ -114,12 +148,12 @@ def showHelp():
     print(" remove\t\t: remove this script from cron scheduler")
 
 def main():
-    known_args = ["start", "register", "remove", "help"]
+    known_args = ["ping", "register", "remove", "help"]
     if len(sys.argv) > 2 or len(sys.argv) < 2 or sys.argv[1] not in known_args:
         print("Argument invalid! should be: {}".format("|".join(known_args)))
         return
     
-    if sys.argv[1] == known_args[0]: uptimeStart()
+    if sys.argv[1] == known_args[0]: uptimePing()
     elif sys.argv[1] == known_args[1]: registerCron()
     elif sys.argv[1] == known_args[2]: removeCron()
     elif sys.argv[1] == known_args[3]: showHelp()

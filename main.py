@@ -11,6 +11,7 @@ import getpass
 import requests
 import platform
 import uuid
+from tinydb import TinyDB
 
 config = {}
 project_path = Path(__file__).absolute().parent
@@ -49,27 +50,24 @@ def fetchPublicIP():
     return ip
 
 # create data structure for firestore
-def pingStruct(data_id, machine_id):
+def pingData(machine_id):
     data = {
-        "id": data_id,
-        "timestamp": getCurrTime(),
-        "interval_min": int(config.get("interval_minutes")),
-        "machine_id": machine_id,
-        "local_ip": fetchLocalIP(),
-        "public_ip": fetchPublicIP() if config.get("show_public_ip") else None,
-        "os_type": platform.system()
+        "id": str(uuid.uuid4()),
+        "machineId": machine_id,
+        "timestamp": getCurrTime()
     }
     return data
 
 # create data structure for firestore
-def registerStruct(machine_id):
+def registerData(machine_name) -> dict:
     data = {
+        "id": str(uuid.uuid4()),
+        "machineName": machine_name,
         "timestamp": getCurrTime(),
-        "interval_min": int(config.get("interval_minutes")),
-        "machine_id": machine_id,
-        "local_ip": fetchLocalIP(),
-        "public_ip": fetchPublicIP() if config.get("show_public_ip") else None,
-        "os_type": platform.system()
+        "intervalMin": int(config.get("interval_minutes")),
+        "localIp": fetchLocalIP(),
+        "publicIp": fetchPublicIP() if config.get("show_public_ip") else None,
+        "osType": platform.system()
     }
     return data
 
@@ -83,11 +81,40 @@ def uptimePing():
     app = firebase_admin.initialize_app(cred)
     db = firestore.client(app)
 
-    machine_id = config.get("instance_id") or socket.gethostname()
-    data_id = str(uuid.uuid4())
+    machine_name = config.get("instance_id") or socket.gethostname()
 
     printLog("Start write uptime")
-    db.collection("machine-uptime").document(data_id).set(pingStruct(data_id, machine_id))
+
+    tinydb = TinyDB('cache.json')
+    cache_machine_list = tinydb.all()
+    register_data = registerData(machine_name)
+    machine_id = register_data.get("id")
+    exception_key = ["id", "timestamp"]
+    found_diff = False
+
+    if not cache_machine_list:
+        found_diff = True
+    else:
+        machine_id = cache_machine_list[0].get("id")
+        for key, val in register_data.items():
+            if key in exception_key:
+                continue
+            if cache_machine_list[0].get(key) != val:
+                found_diff = True
+
+    if found_diff:
+        register_data["id"] = machine_id
+        db.collection("machine-list").document(machine_id).set(register_data)
+        for key, val in register_data.items():
+            if isinstance(val, datetime):
+                register_data[key] = str(val)
+                
+        tinydb.truncate()
+        tinydb.insert(register_data)
+
+    ping_data = pingData(machine_id)
+    db.collection("machine-uptime").document(ping_data.get("id")).set(ping_data)
+
     printLog("Write uptime done")
 
 # command "register" - register this script to cronjob
@@ -117,18 +144,6 @@ def registerCron():
     cron.write()
 
     printLog("Script has been registered to crontab")
-
-    # setup firestore
-    cred = credentials.Certificate(firebase_creds)
-    app = firebase_admin.initialize_app(cred)
-    db = firestore.client(app)
-
-    machine_id = config.get("instance_id") or socket.gethostname()
-    data_id = str(uuid.uuid4())
-
-    printLog("Start write uptime")
-    db.collection("machine-uptime").document(data_id).set(dataStruct(data_id, machine_id))
-    printLog("Write uptime done")
 
 # command "remove" - remove this script from cronjob
 def removeCron():

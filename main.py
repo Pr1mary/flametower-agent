@@ -95,7 +95,7 @@ def uptimeStart():
     # setup tiny db
     tinydb = TinyDB("cache.json")
     old_data = tinydb.all()[0] if len(tinydb.all()) else None
-    print(old_data)
+    
     # check if there is old data available in local
     if old_data:
         

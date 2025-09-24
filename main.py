@@ -10,6 +10,8 @@ import yaml
 import getpass
 import requests
 import platform
+from tinydb import TinyDB
+import uuid
 
 config = {}
 project_path = Path(__file__).absolute().parent
@@ -47,8 +49,8 @@ def fetchPublicIP():
         ip = None
     return ip
 
-# create data structure for firestore
-def dataStruct(machine_id):
+# create uptime data format for firestore
+def uptimeData(machine_id: str):
     data = {
         "last_update": getCurrTime(),
         "interval_min": int(config.get("interval_minutes")),
@@ -60,8 +62,19 @@ def dataStruct(machine_id):
     }
     return data
 
+# create downtime data format for firestore
+def downtimeData(machine_id: str, last_found: datetime):
+    data = {
+        "id": str(uuid.uuid4()),
+        "machine_id": machine_id,
+        "old_timestamp": last_found,
+        "new_timestamp": getCurrTime(),
+    }
+    return data
+
 # command "start" - write uptime data to firestore
 def uptimeStart():
+    # setup firebase creds
     firebase_creds = "{}/{}".format(project_path, config.get("firebase_creds"))
     if not Path(firebase_creds).exists():
         printLog("Firebase credentials not found!")
@@ -70,10 +83,44 @@ def uptimeStart():
     app = firebase_admin.initialize_app(cred)
     db = firestore.client(app)
 
-    machine_id = config.get("instance_id") or socket.gethostname()
-
     printLog("Start write uptime")
-    db.collection("machine-uptime").document(machine_id).set(dataStruct(machine_id))
+
+    # setup data
+    machine_id = config.get("instance_id") or socket.gethostname()
+    uptime_data = uptimeData(machine_id)
+
+    # write uptime data to firestore
+    db.collection("machine-uptime").document(machine_id).set(uptime_data)
+    
+    # setup tiny db
+    tinydb = TinyDB("cache.json")
+    old_data = tinydb.all()[0] if len(tinydb.all()) else None
+    
+    # check if there is old data available in local
+    if old_data:
+        
+        last_update_str = old_data.get("last_update")
+        last_update = datetime.fromisoformat(last_update_str)
+        interval = old_data.get("interval_min")
+
+        # write downtime data to firestore if time differences between local data with updated data
+        # is more than interval minutes + 30 seconds as acceptable difference 
+        time_diff = (uptime_data.get("last_update") - last_update).total_seconds()
+        if time_diff > (interval * 60) + 30:
+            downtime_data = downtimeData(machine_id, last_update)
+            db.collection("machine-downtime").document(downtime_data.get("id")).set(downtime_data)
+        
+        # remove old data
+        tinydb.truncate()
+
+    # reformat unsupported value so it can be write as json
+    for key, val in uptime_data.items():
+        if isinstance(val, datetime):
+            uptime_data[key] = str(val)
+
+    # write data as local cache
+    tinydb.insert(uptime_data)
+    
     printLog("Write uptime done")
 
 # command "register" - register this script to cronjob

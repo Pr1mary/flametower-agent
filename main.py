@@ -51,8 +51,10 @@ def fetchPublicIP():
 
 # create uptime data format for firestore
 def uptimeData(machine_id: str):
+    curr_time = getCurrTime()
     data = {
-        "last_update": getCurrTime(),
+        "last_update": curr_time,
+        "uptime_since": curr_time,
         "interval_min": int(config.get("interval_minutes")),
         "machine_id": machine_id,
         "group_id": config.get("group_id"),
@@ -72,8 +74,8 @@ def downtimeData(machine_id: str, last_found: datetime):
     }
     return data
 
-# command "start" - write uptime data to firestore
-def uptimeStart():
+# command "ping" - write uptime data to firestore
+def uptimePing():
     # setup firebase creds
     firebase_creds = "{}/{}".format(project_path, config.get("firebase_creds"))
     if not Path(firebase_creds).exists():
@@ -88,9 +90,6 @@ def uptimeStart():
     # setup data
     machine_id = config.get("instance_id") or socket.gethostname()
     uptime_data = uptimeData(machine_id)
-
-    # write uptime data to firestore
-    db.collection("machine-uptime").document(machine_id).set(uptime_data)
     
     # setup tiny db
     tinydb = TinyDB("cache.json")
@@ -99,9 +98,12 @@ def uptimeStart():
     # check if there is old data available in local
     if old_data:
         
-        last_update_str = old_data.get("last_update")
-        last_update = datetime.fromisoformat(last_update_str)
+        last_update = datetime.fromisoformat(old_data.get("last_update"))
+        start_from = datetime.fromisoformat(old_data.get("uptime_since"))
         interval = old_data.get("interval_min")
+
+        # continue old uptime start time
+        uptime_data["uptime_since"] = start_from if start_from else uptime_data["last_update"]
 
         # write downtime data to firestore if time differences between local data with updated data
         # is more than interval minutes + 30 seconds as acceptable difference 
@@ -112,6 +114,9 @@ def uptimeStart():
         
         # remove old data
         tinydb.truncate()
+    
+    # write uptime data to firestore
+    db.collection("machine-uptime").document(machine_id).set(uptime_data)
 
     # reformat unsupported value so it can be write as json
     for key, val in uptime_data.items():
@@ -124,18 +129,22 @@ def uptimeStart():
     printLog("Write uptime done")
 
 # command "register" - register this script to cronjob
-def registerCron():
+def registerCron(command:str = None):
     user = getpass.getuser()
     cron = CronTab(user=user)
     virtualenv_path = "{}/{}".format(project_path, config.get("virtualenv")) if config.get("virtualenv") else None
 
     if virtualenv_path and Path(virtualenv_path).exists():
-        command = "{}/bin/python3 {} start >> {}".format(
+        command = "{}/bin/python3 {} {} >> {}".format(
             virtualenv_path,
             Path(__file__).absolute(),
+            command,
             "{}/{}".format(project_path, "log.txt"))
     else:
-        command = "python3 {} start >> {}".format(Path(__file__).absolute(), Path("log.txt").absolute())
+        command = "python3 {} {} >> {}".format(
+            Path(__file__).absolute(),
+            command,
+            Path("log.txt").absolute())
 
     job = cron.new(command=command, comment="project-uptime")
     job.minute.every(int(config.get("interval_minutes")))
@@ -161,13 +170,13 @@ def showHelp():
     print(" remove\t\t: remove this script from cron scheduler")
 
 def main():
-    known_args = ["start", "register", "remove", "help"]
+    known_args = ["ping", "register", "remove", "help"]
     if len(sys.argv) > 2 or len(sys.argv) < 2 or sys.argv[1] not in known_args:
         print("Argument invalid! should be: {}".format("|".join(known_args)))
         return
     
-    if sys.argv[1] == known_args[0]: uptimeStart()
-    elif sys.argv[1] == known_args[1]: registerCron()
+    if sys.argv[1] == known_args[0]: uptimePing()
+    elif sys.argv[1] == known_args[1]: registerCron(known_args[0])
     elif sys.argv[1] == known_args[2]: removeCron()
     elif sys.argv[1] == known_args[3]: showHelp()
 

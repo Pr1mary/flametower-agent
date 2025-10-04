@@ -92,7 +92,7 @@ def uptimePing():
     uptime_data = uptimeData(machine_id)
     
     # setup tiny db
-    tinydb = TinyDB("cache.json")
+    tinydb = TinyDB("{}/cache.json".format(project_path))
     old_data = tinydb.all()[0] if len(tinydb.all()) else None
     
     # check if there is old data available in local

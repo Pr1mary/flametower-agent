@@ -85,7 +85,7 @@ def uptimePing():
     app = firebase_admin.initialize_app(cred)
     db = firestore.client(app)
 
-    printLog("Start write uptime")
+    printLog("--- Start write uptime data ---")
 
     # setup data
     machine_id = config.get("instance_id") or socket.gethostname()
@@ -96,7 +96,10 @@ def uptimePing():
     old_data = tinydb.all()[0] if len(tinydb.all()) else None
     
     # check if there is old data available in local
+    printLog("Checking cache data...")
     if old_data:
+        
+        printLog("Cache data found, getting required exisiting data...")
         
         last_update = datetime.fromisoformat(old_data.get("last_update"))
         start_from = datetime.fromisoformat(old_data.get("uptime_since"))
@@ -114,9 +117,12 @@ def uptimePing():
         
         # remove old data
         tinydb.truncate()
+        printLog("Old cache removed")
     
     # write uptime data to firestore
+    printLog("Writing to firestore...")
     db.collection("machine-uptime").document(machine_id).set(uptime_data)
+    printLog("Write to firestore done")
 
     # reformat unsupported value so it can be write as json
     for key, val in uptime_data.items():
@@ -124,9 +130,11 @@ def uptimePing():
             uptime_data[key] = str(val)
 
     # write data as local cache
+    printLog("Writing to cache...")
     tinydb.insert(uptime_data)
+    printLog("Write to cache done")
     
-    printLog("Write uptime done")
+    printLog("--- Write uptime data process done ---")
 
 # command "register" - register this script to cronjob
 def registerCron(command:str = None):

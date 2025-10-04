@@ -101,23 +101,26 @@ def uptimePing():
         
         printLog("Cache data found, getting required exisiting data...")
         
-        last_update = datetime.fromisoformat(old_data.get("last_update"))
-        start_from = datetime.fromisoformat(old_data.get("uptime_since"))
-        interval = old_data.get("interval_min")
+        try:
+            last_update = datetime.fromisoformat(old_data.get("last_update"))
+            start_from = datetime.fromisoformat(old_data.get("uptime_since"))
+            interval = old_data.get("interval_min")
 
-        # continue old uptime start time
-        uptime_data["uptime_since"] = start_from if start_from else uptime_data["last_update"]
+            # continue old uptime start time
+            uptime_data["uptime_since"] = start_from if start_from else uptime_data["last_update"]
 
-        # write downtime data to firestore if time differences between local data with updated data
-        # is more than interval minutes + 30 seconds as acceptable difference 
-        time_diff = (uptime_data.get("last_update") - last_update).total_seconds()
-        if time_diff > (interval * 60) + 30:
-            downtime_data = downtimeData(machine_id, last_update)
-            db.collection("machine-downtime").document(downtime_data.get("id")).set(downtime_data)
-        
-        # remove old data
-        tinydb.truncate()
-        printLog("Old cache removed")
+            # write downtime data to firestore if time differences between local data with updated data
+            # is more than interval minutes + 30 seconds as acceptable difference 
+            time_diff = (uptime_data.get("last_update") - last_update).total_seconds()
+            if time_diff > (interval * 60) + 30:
+                downtime_data = downtimeData(machine_id, last_update)
+                db.collection("machine-downtime").document(downtime_data.get("id")).set(downtime_data)
+            
+            # remove old data
+            tinydb.truncate()
+            printLog("Old cache removed")
+        except Exception as exc:
+            printLog("Found error when using cache data: ", exc)
     
     # write uptime data to firestore
     printLog("Writing to firestore...")

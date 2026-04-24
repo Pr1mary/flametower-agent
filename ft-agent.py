@@ -176,9 +176,10 @@ def removeCron():
 # command "help" - show help
 def showHelp():
     print("Basic commands")
-    print(" start\t\t: trigger update status to firestore")
+    print(" ping\t\t: trigger update status to firestore")
     print(" register\t: register cron scheduling for this script")
     print(" remove\t\t: remove this script from cron scheduler")
+    print(" help\t\t: show this help page")
 
 def main():
     known_args = ["ping", "register", "remove", "help"]
